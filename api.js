@@ -203,7 +203,7 @@ export async function fetchActiveWaitlist({ apiKey }) {
 export async function fetchPatientById({ apiKey }, patientId) {
   try {
     const response = await apiGet(`/patients/${patientId}`, { apiKey });
-    const raw = response.data ?? response;
+    return response.data ?? response;
   } catch (err) {
     console.error(`Failed to fetch patient ID ${patientId}`, err);
     return null;
