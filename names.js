@@ -20,12 +20,13 @@ import { fetchAllPages } from "./api.js";
 const REBUILD_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 // Bump this whenever the cache's shape changes (e.g. adding
-// practitionerNames for the waitlist feature). Without it, an existing
-// install's cache — built by an older version of this file — would sit
-// around until its 12h TTL expired, missing whatever new field was just
-// added, and any lookup against that missing field would throw rather
-// than just resolving to "unknown".
-const CACHE_VERSION = 3;
+// practitionerNames for the waitlist feature, or practitionerActive for
+// filtering out inactive practitioners) OR whenever the underlying fetch
+// logic changes in a way that makes an existing cache's *contents*
+// suspect (e.g. the pagination-direction fix — a cache built by the
+// buggy version may be silently missing most patients, and would
+// otherwise sit around for up to 12h before naturally refreshing).
+const CACHE_VERSION = 5;
 
 function displayNameFromPatient(p) {
   return [p.preferredName || p.firstname, p.lastname].filter(Boolean).join(" ") || "Unknown patient";
@@ -49,6 +50,7 @@ function normalizeCache(raw) {
     patientNames: raw?.patientNames ?? {},
     contactNames: raw?.contactNames ?? {},
     practitionerNames: raw?.practitionerNames ?? {},
+    practitionerActive: raw?.practitionerActive ?? {},
     builtAt: raw?.builtAt ?? 0,
     version: CACHE_VERSION,
   };
@@ -68,9 +70,23 @@ async function rebuildCache({ apiKey }) {
   for (const c of contacts) contactNames[String(c.id)] = displayNameFromContact(c);
 
   const practitionerNames = {};
-  for (const p of practitioners) practitionerNames[String(p.id)] = displayNameFromPractitioner(p);
+  const practitionerActive = {};
+  for (const p of practitioners) {
+    practitionerNames[String(p.id)] = displayNameFromPractitioner(p);
+    // isActive is a plain boolean on /practitioners. Treat anything other
+    // than an explicit `false` as active, so a practitioner record missing
+    // the field entirely (shouldn't happen per the spec, but just in
+    // case) doesn't get silently hidden.
+    practitionerActive[String(p.id)] = p.isActive !== false;
+  }
 
-  const cache = normalizeCache({ patientNames, contactNames, practitionerNames, builtAt: Date.now() });
+  const cache = normalizeCache({
+    patientNames,
+    contactNames,
+    practitionerNames,
+    practitionerActive,
+    builtAt: Date.now(),
+  });
   await chrome.storage.local.set({ nameCache: cache });
   return cache;
 }
@@ -128,14 +144,20 @@ export async function attachContactNames(invoices, config) {
 /**
  * Enriches a batch of waitlist entries with patient and practitioner
  * display names, using the same shared cache (so a poll that touches both
- * invoices and the waitlist only rebuilds the cache once).
+ * invoices and the waitlist only rebuilds the cache once). Also drops
+ * entries assigned to a practitioner whose /practitioners record has
+ * isActive === false — an entry with no practitioner assigned at all
+ * ("Unassigned") is left alone, since there's no practitioner to be
+ * inactive.
  */
 export async function attachWaitlistNames(items, config) {
   const cache = await getCache(config);
-  return items.map((item) => ({
-    ...item,
-    patientName: (item.patientId && cache.patientNames[item.patientId]) || "Unknown patient",
-    practitionerName:
-      (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
-  }));
+  return items
+    .filter((item) => !item.practitionerId || cache.practitionerActive[item.practitionerId] !== false)
+    .map((item) => ({
+      ...item,
+      patientName: (item.patientId && cache.patientNames[item.patientId]) || "Unknown patient",
+      practitionerName:
+        (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
+    }));
 }

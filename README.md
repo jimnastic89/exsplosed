@@ -19,9 +19,14 @@ against your OpenAPI doc, which changed a few things worth knowing:
   fully trusting it (open an invoice in Splose and compare the URL shape).
 - **Pagination is cursor-based** (`id_gt`/`id_lt`), not page numbers.
   Splose's own doc has the `links.previousPage`/`links.nextPage`
-  descriptions swapped relative to their examples, so `api.js` doesn't rely
-  on those labels at all — it just walks forward using the highest `id`
-  seen on each page.
+  descriptions swapped relative to their examples and doesn't state a
+  default sort direction, so `paginate()` in `api.js` doesn't assume one —
+  it detects ascending vs. descending from the first page's own id order
+  and walks the correct way from there. (An earlier version assumed
+  ascending-by-id always; on any endpoint that actually defaults to
+  newest-first, that silently stopped after the first page and dropped
+  everything older — this showed up as patients resolving to "Unknown
+  patient" despite clearly existing in `/patients`.)
 - **No "overdue" status exists.** The `status` enum is only `Draft` /
   `Awaiting Payment` / `Paid`. The server-side filter is
   `status=Awaiting Payment`; "overdue" is still entirely our own

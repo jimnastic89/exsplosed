@@ -13,10 +13,13 @@
 // - Pagination is cursor-based: `id_gt` / `id_lt`, not page numbers. The
 //   response includes a `links.previousPage`/`links.nextPage` pair, but
 //   Splose's own doc has their descriptions swapped relative to their
-//   example values, so rather than trust those labels, this walks forward
-//   using the highest `id` seen on each page as the next `id_gt`. Page
-//   size is server-controlled (not documented), so we just loop until an
-//   empty page comes back.
+//   example values, and doesn't state a default sort direction — so
+//   `paginate()` below detects direction from the first page's own
+//   ordering rather than assuming ascending-by-id (an earlier version of
+//   this file assumed ascending, which silently dropped everything past
+//   the first page on any endpoint that actually defaults to
+//   descending/newest-first — e.g. was causing "Unknown patient" for
+//   older patients).
 // - Invoice `status` enum is only `Draft` / `Awaiting Payment` / `Paid` —
 //   there's no "overdue" status. We filter server-side for
 //   `Awaiting Payment` and apply our own age-since-due-date threshold
@@ -97,6 +100,60 @@ function normalizeInvoice(raw) {
 }
 
 /**
+ * Fetches every page of a cursor-paginated list endpoint (/invoices,
+ * /patients, /contacts, /practitioners, /waitlists), applying extra static
+ * query params (e.g. { status: "Awaiting Payment" }) to every page.
+ *
+ * IMPORTANT — sort direction is NOT assumed, it's detected:
+ * Splose's own docs are self-contradictory about whether results come
+ * back ascending or descending by id by default (previousPage/nextPage
+ * descriptions are swapped relative to their examples). Assuming
+ * ascending and always walking forward with `id_gt=max(ids seen)` is
+ * actively wrong if the real default is descending (newest-first): the
+ * first page would already contain the highest ids, so `id_gt=max` would
+ * match nothing, and the loop would silently stop after one page —
+ * quietly dropping every older record. That's the exact bug this fixed:
+ * only the most-recent page of patients was ever being cached, so anyone
+ * older showed up as "Unknown patient".
+ *
+ * Instead: look at the first page's own order. If it's ascending, keep
+ * walking forward with `id_gt` + the max id seen. If it's descending (or
+ * a single item, where direction can't be inferred — arbitrarily walk
+ * forward, it'll just stop after one page if that's genuinely all there
+ * is), walk backward with `id_lt` + the min id seen.
+ */
+async function paginate(path, { apiKey }, extraParams = {}) {
+  const all = [];
+  let cursorParam = null; // "id_gt" | "id_lt", decided after the first page
+  let cursorValue;
+  let iterations = 0;
+  const maxIterations = 500; // safety valve against a pagination bug looping forever
+
+  while (iterations < maxIterations) {
+    iterations += 1;
+    const params = { ...extraParams };
+    if (cursorParam) params[cursorParam] = cursorValue;
+
+    const body = await apiGet(path, { apiKey }, params);
+    const items = body.data ?? [];
+    if (items.length === 0) break;
+
+    all.push(...items);
+
+    if (!cursorParam) {
+      const firstId = items[0].id;
+      const lastId = items[items.length - 1].id;
+      cursorParam = lastId < firstId ? "id_lt" : "id_gt";
+    }
+
+    cursorValue =
+      cursorParam === "id_gt" ? Math.max(...items.map((i) => i.id)) : Math.min(...items.map((i) => i.id));
+  }
+
+  return all;
+}
+
+/**
  * Fetches every "Awaiting Payment" invoice via cursor pagination.
  * Sequential (not parallel) requests by design — Splose's 60/min limit and
  * the 1s-average-latency rule both reward gentle, predictable traffic over
@@ -105,27 +162,8 @@ function normalizeInvoice(raw) {
  * whole ledger.
  */
 export async function fetchAllUnpaidInvoices({ apiKey }) {
-  const all = [];
-  let cursor = undefined;
-  let iterations = 0;
-  const maxIterations = 50; // safety valve against a pagination bug looping forever
-
-  while (iterations < maxIterations) {
-    iterations += 1;
-    const body = await apiGet("/invoices", { apiKey }, {
-      status: "Awaiting Payment",
-      id_gt: cursor,
-    });
-
-    const items = body.data ?? [];
-    if (items.length === 0) break;
-
-    for (const raw of items) all.push(normalizeInvoice(raw));
-
-    cursor = Math.max(...items.map((i) => i.id));
-  }
-
-  return all;
+  const raw = await paginate("/invoices", { apiKey }, { status: "Awaiting Payment" });
+  return raw.map(normalizeInvoice);
 }
 
 /**
@@ -134,24 +172,7 @@ export async function fetchAllUnpaidInvoices({ apiKey }) {
  * query params (e.g. { isActive: "true" }) applied to every page.
  */
 export async function fetchAllPages(path, { apiKey }, extraParams = {}) {
-  const all = [];
-  let cursor = undefined;
-  let iterations = 0;
-  const maxIterations = 200;
-
-  while (iterations < maxIterations) {
-    iterations += 1;
-    const body = await apiGet(path, { apiKey }, {
-      ...extraParams,
-      id_gt: cursor,
-    });
-    const items = body.data ?? [];
-    if (items.length === 0) break;
-    all.push(...items);
-    cursor = Math.max(...items.map((i) => i.id));
-  }
-
-  return all;
+  return paginate(path, { apiKey }, extraParams);
 }
 
 function normalizeWaitlistItem(raw) {
@@ -159,7 +180,6 @@ function normalizeWaitlistItem(raw) {
     id: String(raw.id),
     patientId: raw.patientId != null ? String(raw.patientId) : null,
     practitionerId: raw.practitionerId != null ? String(raw.practitionerId) : null,
-    archived: raw.archived === true,
     // No explicit "date added" field in the response schema (only
     // createdAt/updatedAt), even though the API accepts dateAddedGt/Lt as
     // query filters — using createdAt as a stand-in for "waiting since".
