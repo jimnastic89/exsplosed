@@ -112,6 +112,13 @@ body {
 
 #unconfiguredState { padding: 32px 12px; }
 
+/* The side panel specifically gets a plain white background (per request)
+   — the options page keeps the warmer --bg tone, so this is scoped to
+   the panel's body id rather than changed on the shared `body` rule. */
+#sidePanelBody {
+  background: #ffffff;
+}
+
 .empty-state {
   padding: 32px 8px;
   text-align: center;

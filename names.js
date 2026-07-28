@@ -19,14 +19,18 @@ import { fetchAllPages } from "./api.js";
 
 const REBUILD_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
-// Bump this whenever the cache's shape changes (e.g. adding
-// practitionerNames for the waitlist feature, or practitionerActive for
-// filtering out inactive practitioners) OR whenever the underlying fetch
-// logic changes in a way that makes an existing cache's *contents*
-// suspect (e.g. the pagination-direction fix — a cache built by the
-// buggy version may be silently missing most patients, and would
-// otherwise sit around for up to 12h before naturally refreshing).
-const CACHE_VERSION = 5;
+// Bump this whenever the cache's shape changes, or whenever the
+// underlying fetch logic changes in a way that makes an existing cache's
+// *contents* suspect and worth rebuilding right away rather than waiting
+// out the normal 12h TTL. Latest reason: rebuildCache used to fetch
+// patients/contacts/practitioners concurrently via Promise.all, which (a)
+// roughly tripled the instantaneous request rate against Splose's
+// 60/minute limit, and (b) meant a single rate-limit error on any one of
+// the three discarded the entire rebuild, including endpoints that had
+// already succeeded — so a cache built under load could get stuck
+// perpetually incomplete, retrying the same failing concurrent burst
+// every poll. Now sequential, with independent per-endpoint fallback.
+const CACHE_VERSION = 6;
 
 function displayNameFromPatient(p) {
   return [p.preferredName || p.firstname, p.lastname].filter(Boolean).join(" ") || "Unknown patient";
@@ -53,15 +57,36 @@ function normalizeCache(raw) {
     practitionerActive: raw?.practitionerActive ?? {},
     builtAt: raw?.builtAt ?? 0,
     version: CACHE_VERSION,
+    __rawPatients: raw?.__rawPatients ?? [],
+    __rawContacts: raw?.__rawContacts ?? [],
+    __rawPractitioners: raw?.__rawPractitioners ?? [],
   };
 }
 
-async function rebuildCache({ apiKey }) {
-  const [patients, contacts, practitioners] = await Promise.all([
-    fetchAllPages("/patients", { apiKey }),
-    fetchAllPages("/contacts", { apiKey }),
-    fetchAllPages("/practitioners", { apiKey }),
-  ]);
+async function rebuildCache({ apiKey }, previousCache) {
+  // Sequential, not concurrent — same reasoning as everywhere else this
+  // codebase talks to Splose: running three paginated fetches at once
+  // roughly triples the instantaneous request rate against the 60/minute
+  // limit. Worse, the previous version used Promise.all, which means a
+  // single 429 partway through *any* of the three discarded the whole
+  // rebuild — including patients that may have already finished — and
+  // since the cache stays "stale" afterwards, the next poll would retry
+  // the same concurrent burst and could fail the same way indefinitely.
+  // Fetching one at a time, and falling back independently per endpoint,
+  // fixes both problems.
+  const patients = await fetchListSafely("/patients", { apiKey }, previousCache?.__rawPatients);
+  const contacts = await fetchListSafely("/contacts", { apiKey }, previousCache?.__rawContacts);
+  const practitioners = await fetchListSafely("/practitioners", { apiKey }, previousCache?.__rawPractitioners);
+
+  if (patients.length > 0) {
+    // Sanity check: confirms the real shape of a patient record matches
+    // what displayNameFromPatient()/the id lookup below assume. If this
+    // looks different from { id, firstname, lastname, preferredName, ... }
+    // that's the actual bug, not the caching/pagination machinery around it.
+    console.info("[names.js] Sample raw patient record:", JSON.stringify(patients[0]));
+  } else {
+    console.warn("[names.js] /patients returned zero records.");
+  }
 
   const patientNames = {};
   for (const p of patients) patientNames[String(p.id)] = displayNameFromPatient(p);
@@ -86,9 +111,34 @@ async function rebuildCache({ apiKey }) {
     practitionerNames,
     practitionerActive,
     builtAt: Date.now(),
+    // Keep the raw lists around (not just the derived name maps) so a
+    // future rebuild that fails on one endpoint can still fall back to
+    // this endpoint's last-known-good raw data instead of an empty list.
+    __rawPatients: patients,
+    __rawContacts: contacts,
+    __rawPractitioners: practitioners,
   });
   await chrome.storage.local.set({ nameCache: cache });
+  console.info(
+    `[names.js] Cache rebuilt: ${patients.length} patients, ${contacts.length} contacts, ` +
+      `${practitioners.length} practitioners.`
+  );
   return cache;
+}
+
+/**
+ * Fetches one list endpoint, falling back to whatever we fetched
+ * successfully last time (if any) rather than an empty list on failure —
+ * so a transient rate limit on, say, /practitioners doesn't wipe out
+ * practitioner names entirely, it just means they're one cycle stale.
+ */
+async function fetchListSafely(path, { apiKey }, previousRaw) {
+  try {
+    return await fetchAllPages(path, { apiKey });
+  } catch (err) {
+    console.error(`Fetching ${path} for the name cache failed, reusing last-known data:`, err);
+    return previousRaw || [];
+  }
 }
 
 async function getCache({ apiKey }, { forceRebuild = false } = {}) {
@@ -99,10 +149,13 @@ async function getCache({ apiKey }, { forceRebuild = false } = {}) {
     Date.now() - nameCache.builtAt > REBUILD_INTERVAL_MS;
 
   if (forceRebuild || stale) {
+    console.info(
+      `[names.js] Cache is ${!nameCache ? "missing" : nameCache.version !== CACHE_VERSION ? "an old version" : "stale (past 12h)"} — rebuilding.`
+    );
     try {
-      return await rebuildCache({ apiKey });
+      return await rebuildCache({ apiKey }, nameCache);
     } catch (err) {
-      console.error("Name cache rebuild failed, falling back to stale/empty cache:", err);
+      console.error("[names.js] Cache rebuild threw and was fully aborted, falling back:", err);
       // normalizeCache guarantees this is safe to use even if `nameCache`
       // is undefined, from an old version, or otherwise partial.
       return normalizeCache(nameCache);
@@ -152,12 +205,34 @@ export async function attachContactNames(invoices, config) {
  */
 export async function attachWaitlistNames(items, config) {
   const cache = await getCache(config);
-  return items
-    .filter((item) => !item.practitionerId || cache.practitionerActive[item.practitionerId] !== false)
-    .map((item) => ({
-      ...item,
-      patientName: (item.patientId && cache.patientNames[item.patientId]) || "Unknown patient",
-      practitionerName:
-        (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
-    }));
+
+  const filtered = items.filter(
+    (item) => !item.practitionerId || cache.practitionerActive[item.practitionerId] !== false
+  );
+
+  const enriched = filtered.map((item) => ({
+    ...item,
+    patientName: (item.patientId && cache.patientNames[item.patientId]) || "Unknown patient",
+    practitionerName: (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
+  }));
+
+  // Diagnostic logging: if names still aren't resolving, this tells us
+  // exactly what's mismatched instead of guessing again — check the
+  // service worker console (chrome://extensions → this extension →
+  // "service worker" under Inspect views → Console tab) after a poll.
+  const unresolved = enriched.filter((item) => item.patientName === "Unknown patient" && item.patientId);
+  if (unresolved.length > 0) {
+    const cacheKeys = Object.keys(cache.patientNames);
+    console.warn(
+      `[names.js] ${unresolved.length}/${enriched.length} waitlist entries have a patientId ` +
+        `not found in the name cache. Cache currently holds ${cacheKeys.length} patient names.`
+    );
+    console.warn(
+      "[names.js] Unresolved patientIds (from waitlist items):",
+      unresolved.map((item) => item.patientId)
+    );
+    console.warn("[names.js] Sample of cache keys actually available:", cacheKeys.slice(0, 10));
+  }
+
+  return enriched;
 }

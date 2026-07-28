@@ -264,6 +264,7 @@ function renderWaitlist(items, lastPolledAt) {
       const li = document.createElement("li");
       const btn = document.createElement("button");
       btn.className = "waitlist-row";
+      btn.title = item.patientId ? `Patient ID: ${item.patientId}` : "Patient ID: unknown";
       btn.innerHTML = `
         <div class="waitlist-row-top">
           <span class="waitlist-patient"></span>
