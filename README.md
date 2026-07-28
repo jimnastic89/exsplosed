@@ -1,4 +1,4 @@
-# Explosed
+# Exsplosed
 
 A Chrome extension that polls the Splose API to expose actionable items to
 the user via a toolbar badge, reminder toasts, and a toggleable side panel.
