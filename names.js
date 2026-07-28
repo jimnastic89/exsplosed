@@ -236,41 +236,4 @@ export async function attachWaitlistNames(items, config) {
   }
 
   return enriched;
-
-  /*const enriched = filtered.map((item) => {
-    let resolvedName = "Unknown patient";
-    if (item.patientId) {
-      if (cache.patientNames[item.patientId]) {
-        resolvedName = cache.patientNames[item.patientId];
-      } else {
-        resolvedName = `Patient #${item.patientId} (Not in cache)`;
-      }
-    }
-    return {
-      ...item,
-      patientName: resolvedName,
-      practitionerName: (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
-    }
-  }
-  );*/
-
-  // Diagnostic logging: if names still aren't resolving, this tells us
-  // exactly what's mismatched instead of guessing again — check the
-  // service worker console (chrome://extensions → this extension →
-  // "service worker" under Inspect views → Console tab) after a poll.
-  const unresolved = enriched.filter((item) => item.patientName === "Unknown patient" && item.patientId);
-  if (unresolved.length > 0) {
-    const cacheKeys = Object.keys(cache.patientNames);
-    console.warn(
-      `[names.js] ${unresolved.length}/${enriched.length} waitlist entries have a patientId ` +
-        `not found in the name cache. Cache currently holds ${cacheKeys.length} patient names.`
-    );
-    console.warn(
-      "[names.js] Unresolved patientIds (from waitlist items):",
-      unresolved.map((item) => item.patientId)
-    );
-    console.warn("[names.js] Sample of cache keys actually available:", cacheKeys.slice(0, 10));
-  }
-
-  return enriched;
 }

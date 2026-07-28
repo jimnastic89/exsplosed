@@ -138,9 +138,9 @@ to switch it to `chrome.storage.session`.
   keeps total call volume far below anything that would risk the
   1-second average-latency cutoff.
 - **60 calls/minute**: a single poll cycle only makes enough calls to
-  paginate through unpaid invoices once; `maxPages` in `api.js` is a safety
-  valve (20 pages) against a pagination bug looping forever and burning
-  through the limit.
+  paginate through unpaid invoices once; `maxIterations` in `api.js` is a
+  safety valve (500 pages) against a pagination bug looping forever and
+  burning through the limit.
 - **User-Agent**: handled via the `declarativeNetRequest` rule described
   above — every call to `/v1/*` carries it automatically.
 - **Name cache rebuilds** (`names.js`) paginate through all of `/patients`
