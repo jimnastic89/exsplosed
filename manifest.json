@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Splose Invoice Watcher",
+  "name": "Exsplosed",
   "version": "0.1.1",
-  "description": "Tracks unpaid/overdue Splose invoices with a toolbar badge, throttled reminders, and a persistent side panel.",
+  "description": "Show unpaid/overdue Splose invoices and waitlist patients.",
   "minimum_chrome_version": "114",
 
   "permissions": [
@@ -23,7 +23,7 @@
   },
 
   "action": {
-    "default_title": "Splose Invoice Watcher",
+    "default_title": "Exsplosed",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
