@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Splose Invoice Watcher",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tracks unpaid/overdue Splose invoices with a toolbar badge, throttled reminders, and a persistent side panel.",
   "minimum_chrome_version": "114",
 
