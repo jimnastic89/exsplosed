@@ -15,7 +15,7 @@
 // that names change far less often than invoice status or waitlist
 // membership does.
 
-import { fetchAllPages } from "./api.js";
+import { fetchAllPages, fetchPatientById } from "./api.js";
 
 const REBUILD_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
@@ -210,11 +210,49 @@ export async function attachWaitlistNames(items, config) {
     (item) => !item.practitionerId || cache.practitionerActive[item.practitionerId] !== false
   );
 
-  const enriched = filtered.map((item) => ({
-    ...item,
-    patientName: (item.patientId && cache.patientNames[item.patientId]) || "Unknown patient",
-    practitionerName: (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
-  }));
+  
+
+  const enriched = [];
+  for (const item of filtered) {
+    let patientName = "Unknown patient";
+
+    if (item.patientId) {
+      if (cache.patientNames[item.patientId]) {
+        patientName = cache.patientNames[item.patientId];
+      } else {
+        const directPatient = await fetchPatientById(config, item.patientId);
+        if (directPatient) {
+          patientName = displayNameFromPatient(directPatient);
+          cache.patientNames[item.patientId] = patientName;
+        }
+      }
+    }
+
+    enriched.push({
+      ...item,
+      patientName,
+      practitionerName: (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
+    });
+  }
+
+  return enriched;
+
+  /*const enriched = filtered.map((item) => {
+    let resolvedName = "Unknown patient";
+    if (item.patientId) {
+      if (cache.patientNames[item.patientId]) {
+        resolvedName = cache.patientNames[item.patientId];
+      } else {
+        resolvedName = `Patient #${item.patientId} (Not in cache)`;
+      }
+    }
+    return {
+      ...item,
+      patientName: resolvedName,
+      practitionerName: (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
+    }
+  }
+  );*/
 
   // Diagnostic logging: if names still aren't resolving, this tells us
   // exactly what's mismatched instead of guessing again — check the

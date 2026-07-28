@@ -199,3 +199,13 @@ export async function fetchActiveWaitlist({ apiKey }) {
   const raw = await fetchAllPages("/waitlists", { apiKey }, { isActive: "true" });
   return raw.map(normalizeWaitlistItem);
 }
+
+export async function fetchPatientById({ apiKey }, patientId) {
+  try {
+    const response = await apiGet(`/patients/${patientId}`, { apiKey });
+    const raw = response.data ?? response;
+  } catch (err) {
+    console.error(`Failed to fetch patient ID ${patientId}`, err);
+    return null;
+  }
+}
