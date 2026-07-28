@@ -1,13 +1,8 @@
-# Splose Invoice Watcher
+# Explosed
 
-A Chrome extension that polls the Splose API in the background and keeps
-overdue invoices visible until they're paid — via a toolbar badge, throttled
-reminder toasts, and a persistent side panel that appears on Splose pages.
+A Chrome extension that polls the Splose API to expose actionable items to
+the user via a toolbar badge, reminder toasts, and a toggleable side panel.
 
-## Schema: now confirmed against Splose's OpenAPI spec
-
-The first draft of this guessed at field names. It's now been rewritten
-against your OpenAPI doc, which changed a few things worth knowing:
 
 - **The API host is fixed for every business**: `https://api.splose.com/v1`.
   It is *not* a per-business subdomain — the API key alone identifies your
@@ -27,17 +22,6 @@ against your OpenAPI doc, which changed a few things worth knowing:
   newest-first, that silently stopped after the first page and dropped
   everything older — this showed up as patients resolving to "Unknown
   patient" despite clearly existing in `/patients`.)
-- **No "overdue" status exists.** The `status` enum is only `Draft` /
-  `Awaiting Payment` / `Paid`. The server-side filter is
-  `status=Awaiting Payment`; "overdue" is still entirely our own
-  age-since-due-date check on top, same as originally designed.
-- **No `amount_due` field** — it's derived as `total - paidAmount`.
-- **No currency field on the invoice.** Splose is AU-focused (NDIS/allied
-  health), so the extension defaults display to AUD — that's an inference,
-  flagged as such in `api.js`, not a confirmed field.
-- **No contact/client name on the invoice** — just `patientId` and a
-  nullable `contactId` (who's actually billed, if different from the
-  patient). See `names.js` for how that's resolved.
 
 ## Why there's a separate `names.js`
 
