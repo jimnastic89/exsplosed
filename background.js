@@ -183,6 +183,9 @@ async function diffAndUpdateInvoices(flagged, config) {
   const now = Date.now();
   const flaggedIds = new Set(flagged.map((inv) => inv.id));
 
+  let individualNotificationsFired = 0;
+  const digestOnly = [];
+
   // Newly flagged or still-outstanding invoices.
   for (const inv of flagged) {
     const existing = next[inv.id];
@@ -196,7 +199,12 @@ async function diffAndUpdateInvoices(flagged, config) {
         lastNotifiedAt: now,
         notifyCount: 1,
       };
-      fireNotification(next[inv.id], config, { isFirst: true });
+      if (individualNotificationsFired < config.maxNotificationsPerPoll) {
+        fireNotification(next[inv.id], config, { isFirst: true });
+        individualNotificationsFired += 1;
+      } else {
+        digestOnly.push(next[inv.id]);
+      }
       continue;
     }
 
@@ -207,22 +215,59 @@ async function diffAndUpdateInvoices(flagged, config) {
     if (hoursSinceNotified >= config.notifyCadenceHours) {
       next[inv.id].lastNotifiedAt = now;
       next[inv.id].notifyCount = (existing.notifyCount || 0) + 1;
-      fireNotification(next[inv.id], config, { isFirst: false });
+      if (individualNotificationsFired < config.maxNotificationsPerPoll) {
+        fireNotification(next[inv.id], config, { isFirst: false });
+        individualNotificationsFired += 1;
+      } else {
+        digestOnly.push(next[inv.id]);
+      }
     }
   }
 
+  if (digestOnly.length > 0) {
+    fireDigestNotification(digestOnly);
+  }
+
   // Anything tracked but no longer flagged has been resolved (paid, or aged
-  // back under the threshold, which in practice means paid).
+  // back under the threshold, which in practice means paid). Same burst
+  // protection as above — if a batch of invoices got paid between polls
+  // (e.g. after a reconciliation run), don't fire one toast per invoice.
+  let resolvedNotificationsFired = 0;
+  const resolvedDigestOnly = [];
   for (const [id, existing] of Object.entries(trackedInvoices)) {
     if (!flaggedIds.has(id)) {
-      fireResolvedNotification(existing);
+      if (resolvedNotificationsFired < config.maxNotificationsPerPoll) {
+        fireResolvedNotification(existing);
+        resolvedNotificationsFired += 1;
+      } else {
+        resolvedDigestOnly.push(existing);
+      }
       delete next[id];
     }
+  }
+  if (resolvedDigestOnly.length > 0) {
+    chrome.notifications.create(`resolved-digest-${Date.now()}`, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      priority: 0,
+      title: `${resolvedDigestOnly.length} more invoices marked paid`,
+      message: "Open the side panel to see the full list.",
+    });
   }
 
   await chrome.storage.local.set({ trackedInvoices: next, lastPolledAt: now });
   await chrome.action.setBadgeText({ text: flagged.length ? String(flagged.length) : "" });
   await chrome.action.setBadgeBackgroundColor({ color: "#B4322E" });
+}
+
+function fireDigestNotification(invoices) {
+  chrome.notifications.create(`digest-${Date.now()}`, {
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    priority: 1,
+    title: `${invoices.length} more overdue invoices`,
+    message: "Open the side panel to see the full list.",
+  });
 }
 
 function fireNotification(invoice, config, { isFirst }) {

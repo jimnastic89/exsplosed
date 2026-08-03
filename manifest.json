@@ -8,6 +8,7 @@
   "permissions": [
     "alarms",
     "storage",
+    "unlimitedStorage",
     "notifications",
     "sidePanel",
     "declarativeNetRequest"

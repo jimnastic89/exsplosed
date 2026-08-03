@@ -37,6 +37,8 @@ const DEFAULTS = {
   escalateAfterDays: 14,   // start escalating tone/frequency past this age
   role: "reception",       // "reception" | "clinician" (future scoping hook)
   scopeContactIds: [],     // future: restrict clinician view to their patients
+  maxNotificationsPerPoll: 8,   // cap on individual toasts fired in one poll before folding the rest into a digest
+  maxPatientLookupsPerPoll: 10, // cap on serial live /patients/{id} fallback calls in one poll before forcing a cache rebuild
 };
 
 export async function getConfig() {

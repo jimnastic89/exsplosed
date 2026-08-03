@@ -75,6 +75,20 @@
         </label>
       </section>
 
+      <section>
+        <h2>Performance limits <span class="badge-soon">advanced</span></h2>
+        <label>
+          Max individual notifications per check
+          <input type="number" id="maxNotificationsPerPoll" min="1" max="100" />
+          <span class="hint">Anything past this in one check is folded into a single "N more" digest notification instead of one toast each.</span>
+        </label>
+        <label>
+          Max direct patient lookups per check
+          <input type="number" id="maxPatientLookupsPerPoll" min="1" max="100" />
+          <span class="hint">Caps live per-patient API calls used when the waitlist name cache is missing an entry. If more than this many are missing in one check, the whole name cache is rebuilt instead.</span>
+        </label>
+      </section>
+
       <div class="actions">
         <button type="submit" id="saveBtn">Save settings</button>
         <span id="saveStatus" class="save-status" role="status"></span>

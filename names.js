@@ -204,13 +204,14 @@ export async function attachContactNames(invoices, config) {
  * inactive.
  */
 export async function attachWaitlistNames(items, config) {
-  const cache = await getCache(config);
+  let cache = await getCache(config);
 
   const filtered = items.filter(
     (item) => !item.practitionerId || cache.practitionerActive[item.practitionerId] !== false
   );
 
-  
+  let directLookupsUsed = 0;
+  let missCount = 0;
 
   const enriched = [];
   for (const item of filtered) {
@@ -220,11 +221,18 @@ export async function attachWaitlistNames(items, config) {
       if (cache.patientNames[item.patientId]) {
         patientName = cache.patientNames[item.patientId];
       } else {
-        const directPatient = await fetchPatientById(config, item.patientId);
-        if (directPatient) {
-          patientName = displayNameFromPatient(directPatient);
-          cache.patientNames[item.patientId] = patientName;
+        missCount += 1;
+        if (directLookupsUsed < config.maxPatientLookupsPerPoll) {
+          const directPatient = await fetchPatientById(config, item.patientId);
+          directLookupsUsed += 1;
+          if (directPatient) {
+            patientName = displayNameFromPatient(directPatient);
+            cache.patientNames[item.patientId] = patientName;
+          }
         }
+        // Past the cap, leave this one as "Unknown patient" for this poll —
+        // the forced rebuild below (if triggered) will resolve it properly
+        // on the next poll instead of adding another serial network call now.
       }
     }
 
@@ -233,6 +241,16 @@ export async function attachWaitlistNames(items, config) {
       patientName,
       practitionerName: (item.practitionerId && cache.practitionerNames[item.practitionerId]) || "Unassigned",
     });
+  }
+
+  // A high miss rate means the cache itself is stale/incomplete, not just
+  // a few brand-new patients — worth paying for one real rebuild now
+  // rather than continuing to serially miss on every future poll too.
+  if (missCount > config.maxPatientLookupsPerPoll) {
+    console.warn(
+      `[names.js] ${missCount} waitlist patients missed the cache in one poll — forcing a full rebuild.`
+    );
+    await getCache(config, { forceRebuild: true });
   }
 
   return enriched;

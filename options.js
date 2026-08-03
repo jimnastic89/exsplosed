@@ -11,6 +11,8 @@ const fields = {
   pollIntervalMinutes: document.getElementById("pollIntervalMinutes"),
   notifyCadenceHours: document.getElementById("notifyCadenceHours"),
   role: document.getElementById("role"),
+  maxNotificationsPerPoll: document.getElementById("maxNotificationsPerPoll"),
+  maxPatientLookupsPerPoll: document.getElementById("maxPatientLookupsPerPoll"),
 };
 
 async function load() {
@@ -25,6 +27,8 @@ async function load() {
   fields.pollIntervalMinutes.value = String(config.pollIntervalMinutes);
   fields.notifyCadenceHours.value = String(config.notifyCadenceHours);
   fields.role.value = config.role;
+  fields.maxNotificationsPerPoll.value = config.maxNotificationsPerPoll;
+  fields.maxPatientLookupsPerPoll.value = config.maxPatientLookupsPerPoll;
 }
 
 form.addEventListener("submit", async (e) => {
@@ -37,6 +41,8 @@ form.addEventListener("submit", async (e) => {
     pollIntervalMinutes: Number(fields.pollIntervalMinutes.value),
     notifyCadenceHours: Number(fields.notifyCadenceHours.value),
     role: fields.role.value,
+    maxNotificationsPerPoll: Number(fields.maxNotificationsPerPoll.value),
+    maxPatientLookupsPerPoll: Number(fields.maxPatientLookupsPerPoll.value),
   };
 
   // Only touch the stored API key if the user actually typed a new one.
