@@ -1,4 +1,4 @@
-import { getConfig, setConfig } from "./config.js";
+import { getConfig, setConfig, DEFAULTS } from "./config.js";
 
 const form = document.getElementById("settingsForm");
 const saveStatus = document.getElementById("saveStatus");
@@ -13,7 +13,17 @@ const fields = {
   role: document.getElementById("role"),
   maxNotificationsPerPoll: document.getElementById("maxNotificationsPerPoll"),
   maxPatientLookupsPerPoll: document.getElementById("maxPatientLookupsPerPoll"),
+  calendarAvailableColour: document.getElementById("calendarAvailableColour"),
+  calendarUnavailableColour: document.getElementById("calendarUnavailableColour"),
 };
+
+document.getElementById("calendarAvailableColourReset").addEventListener("click", () => {
+  fields.calendarAvailableColour.value = DEFAULTS.calendarAvailableColour;
+});
+
+document.getElementById("calendarUnavailableColourReset").addEventListener("click", () => {
+  fields.calendarUnavailableColour.value = DEFAULTS.calendarUnavailableColour;
+});
 
 async function load() {
   const config = await getConfig();
@@ -29,6 +39,8 @@ async function load() {
   fields.role.value = config.role;
   fields.maxNotificationsPerPoll.value = config.maxNotificationsPerPoll;
   fields.maxPatientLookupsPerPoll.value = config.maxPatientLookupsPerPoll;
+  fields.calendarAvailableColour.value = config.calendarAvailableColour;
+  fields.calendarUnavailableColour.value = config.calendarUnavailableColour;
 }
 
 form.addEventListener("submit", async (e) => {
@@ -43,6 +55,8 @@ form.addEventListener("submit", async (e) => {
     role: fields.role.value,
     maxNotificationsPerPoll: Number(fields.maxNotificationsPerPoll.value),
     maxPatientLookupsPerPoll: Number(fields.maxPatientLookupsPerPoll.value),
+    calendarAvailableColour: fields.calendarAvailableColour.value,
+    calendarUnavailableColour: fields.calendarUnavailableColour.value,
   };
 
   // Only touch the stored API key if the user actually typed a new one.

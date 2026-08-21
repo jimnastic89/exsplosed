@@ -89,6 +89,25 @@
         </label>
       </section>
 
+      <section>
+        <h2>Calendar colours</h2>
+        <label>
+          Available time slot colour
+          <div class="colour-picker-row">
+            <input type="color" id="calendarAvailableColour" />
+            <button type="button" id="calendarAvailableColourReset" class="btn-reset">Reset to default</button>
+          </div>
+        </label>
+        <label>
+          Unavailable time slot colour
+          <div class="colour-picker-row">
+            <input type="color" id="calendarUnavailableColour" />
+            <button type="button" id="calendarUnavailableColourReset" class="btn-reset">Reset to default</button>
+          </div>
+        </label>
+        <span class="hint">Applied automatically whenever you visit the calendar.</span>
+      </section>
+
       <div class="actions">
         <button type="submit" id="saveBtn">Save settings</button>
         <span id="saveStatus" class="save-status" role="status"></span>

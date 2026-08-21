@@ -22,7 +22,7 @@
 const PERSIST_API_KEY = true;
 const keyStore = PERSIST_API_KEY ? chrome.storage.local : chrome.storage.session;
 
-const DEFAULTS = {
+export const DEFAULTS = {
   // NOTE: the Splose API itself is a single fixed host (api.splose.com),
   // confirmed via the OpenAPI spec — the API key alone identifies your
   // workspace. `subdomain` is only used to build the clickable web-app
@@ -39,6 +39,8 @@ const DEFAULTS = {
   scopeContactIds: [],     // future: restrict clinician view to their patients
   maxNotificationsPerPoll: 8,   // cap on individual toasts fired in one poll before folding the rest into a digest
   maxPatientLookupsPerPoll: 10, // cap on serial live /patients/{id} fallback calls in one poll before forcing a cache rebuild
+  calendarAvailableColour: "#ffffff",
+  calendarUnavailableColour: "f0f1f2",
 };
 
 export async function getConfig() {

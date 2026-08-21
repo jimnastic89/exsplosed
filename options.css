@@ -98,3 +98,41 @@ button[type="submit"]:hover { opacity: 0.92; }
   color: var(--ink);
 }
 .security-note p { line-height: 1.5; }
+
+.colour-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+input[type="color"] {
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+}
+
+/* Chrome/Edge render a color swatch with its own inner padding by default —
+   strip that so the swatch actually fills the 50x50 box. */
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+
+/* Firefox equivalent */
+input[type="color"]::-moz-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+
+.btn-reset {
+  font-size: 0.85em;
+  padding: 4px 10px;
+  cursor: pointer;
+}
