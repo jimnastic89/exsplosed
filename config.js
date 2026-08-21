@@ -40,7 +40,7 @@ export const DEFAULTS = {
   maxNotificationsPerPoll: 8,   // cap on individual toasts fired in one poll before folding the rest into a digest
   maxPatientLookupsPerPoll: 10, // cap on serial live /patients/{id} fallback calls in one poll before forcing a cache rebuild
   calendarAvailableColour: "#ffffff",
-  calendarUnavailableColour: "f0f1f2",
+  calendarUnavailableColour: "#f0f1f2",
 };
 
 export async function getConfig() {
